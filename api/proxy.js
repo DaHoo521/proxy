@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import https from 'https';
+import zlib from 'zlib';
 
 const app = express();
 const PORT = process.env.PORT || 3000; // Use the port provided by Render or default to 3000
@@ -25,23 +26,43 @@ app.use(
     changeOrigin: true,
     pathRewrite: { '^/api/proxy': '/wp-json/wp/v2/posts?_embed' }, // Append the correct REST API path
     agent, // Use the custom agent that ignores SSL errors
-    logLevel: 'debug', // Enable detailed logging for debugging
     selfHandleResponse: true, // Enable manual response handling
     onProxyRes: (proxyRes, req, res) => {
-      let body = '';
+      let body = [];
 
+      // Collect response chunks
       proxyRes.on('data', (chunk) => {
-        body += chunk;
+        body.push(chunk);
       });
 
       proxyRes.on('end', () => {
-        console.log('Response from target:', proxyRes.statusCode, body);
+        // Buffer the collected chunks
+        body = Buffer.concat(body);
 
-        // Set CORS headers and return the response
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-        res.status(proxyRes.statusCode).send(body);
+        // Check for compression and decompress if necessary
+        const encoding = proxyRes.headers['content-encoding'];
+        if (encoding === 'gzip') {
+          zlib.gunzip(body, (err, decoded) => {
+            if (err) {
+              console.error('Decompression error:', err);
+              res.status(500).json({ error: 'Decompression error' });
+              return;
+            }
+            sendResponse(res, proxyRes.statusCode, decoded.toString());
+          });
+        } else if (encoding === 'br') {
+          zlib.brotliDecompress(body, (err, decoded) => {
+            if (err) {
+              console.error('Decompression error:', err);
+              res.status(500).json({ error: 'Decompression error' });
+              return;
+            }
+            sendResponse(res, proxyRes.statusCode, decoded.toString());
+          });
+        } else {
+          // No compression, send the raw response
+          sendResponse(res, proxyRes.statusCode, body.toString());
+        }
       });
     },
     onError: (err, req, res) => {
@@ -58,6 +79,15 @@ app.options('*', (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.status(204).end();
 });
+
+// Helper function to send the response
+function sendResponse(res, statusCode, body) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Content-Type', 'application/json');
+  res.status(statusCode).send(body);
+}
 
 // Start the server
 app.listen(PORT, () => {
