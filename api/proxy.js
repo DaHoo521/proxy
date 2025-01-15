@@ -26,14 +26,27 @@ app.use(
     pathRewrite: { '^/api/proxy': '/wp-json/wp/v2/posts?_embed' }, // Append the correct REST API path
     agent, // Use the custom agent that ignores SSL errors
     logLevel: 'debug', // Enable detailed logging for debugging
+    selfHandleResponse: true, // Enable manual response handling
+    onProxyRes: (proxyRes, req, res) => {
+      let body = '';
+
+      proxyRes.on('data', (chunk) => {
+        body += chunk;
+      });
+
+      proxyRes.on('end', () => {
+        console.log('Response from target:', proxyRes.statusCode, body);
+
+        // Set CORS headers and return the response
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        res.status(proxyRes.statusCode).send(body);
+      });
+    },
     onError: (err, req, res) => {
       console.error('Proxy error:', err);
       res.status(500).json({ error: 'Proxy error', details: err.message });
-    },
-    onProxyRes: (proxyRes, req, res) => {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     },
   })
 );
