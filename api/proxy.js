@@ -8,17 +8,16 @@ const PORT = process.env.PORT || 3000; // Use the port provided by Render or def
 // Enable CORS for all origins
 app.use(cors());
 
-// Middleware to log incoming requests (optional but useful for debugging)
-app.use((req, res, next) => {
-  console.log(`Incoming request: ${req.method} ${req.url}`);
-  next();
+// Route to handle the root URL and display a welcome message
+app.get('/', (req, res) => {
+  res.send('CORS Proxy is running. Use /api/proxy?url=https://artportfolio.infy.uk/wp-json/wp/v2/posts?_embed to proxy requests.');
 });
 
 // Proxy requests
 app.use(
   '/api/proxy',
   createProxyMiddleware({
-    changeOrigin: true, // Changes the origin of the host header to the target URL
+    changeOrigin: true,
     target: '', // Target URL will be dynamically set based on the query parameter
     router: (req) => req.query.url, // Dynamically route to the target URL from the query parameter
     pathRewrite: { '^/api/proxy': '' }, // Remove "/api/proxy" from the forwarded path
