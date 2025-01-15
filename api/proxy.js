@@ -17,13 +17,15 @@ app.get('/', (req, res) => {
   res.send('CORS Proxy is running. It is hardcoded to proxy requests to artportfolio.infy.uk.');
 });
 
-// Proxy requests to the hardcoded URL
+// Proxy requests to the hardcoded WordPress REST API endpoint
 app.use(
   '/api/proxy',
   createProxyMiddleware({
-    target: 'https://artportfolio.infy.uk/wp-json/wp/v2/posts?_embed',
+    target: 'https://artportfolio.infy.uk',
     changeOrigin: true,
+    pathRewrite: { '^/api/proxy': '/wp-json/wp/v2/posts?_embed' }, // Append the correct REST API path
     agent, // Use the custom agent that ignores SSL errors
+    logLevel: 'debug', // Enable detailed logging for debugging
     onError: (err, req, res) => {
       console.error('Proxy error:', err);
       res.status(500).json({ error: 'Proxy error', details: err.message });
